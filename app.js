@@ -107,6 +107,13 @@ const EXAM_AT = "2026-10-22T09:00:00+02:00";
     if (t.title) topicByKey.set(norm(t.title), t);
   });
   function resolveTag(tag) { return topicByKey.get(norm(tag)) || null; }
+  /* Compact topic name for tags: drop a trailing "(...)", and cut at ":" if still long. */
+  function shortTitle(t) {
+    let s = String(t.title || t.id || "").replace(/\s*\([^)]*\)\s*$/, "").trim();
+    if (s.length > 30 && s.indexOf(":") > 3) s = s.slice(0, s.indexOf(":")).trim();
+    if (s.length > 30 && s.indexOf(",") > 3) s = s.slice(0, s.indexOf(",")).trim();
+    return s || String(t.title || t.id || "");
+  }
   function topicOrder(a, b) {
     return (Number(b.priority) || 0) - (Number(a.priority) || 0) || sectionRank(topicSection(a)) - sectionRank(topicSection(b)) || String(a.title).localeCompare(String(b.title));
   }
@@ -763,11 +770,11 @@ const EXAM_AT = "2026-10-22T09:00:00+02:00";
     const nExam = TERMS.filter(function (e) { return e.examined; }).length;
     const nGot = TERMS.filter(function (e) { return res[e.id] === "got"; }).length;
     const nMiss = TERMS.filter(function (e) { return res[e.id] === "missed"; }).length;
-    return '<div class="page-head compact-m s-a"><div class="eyebrow eyebrow-sec">Section A trainer</div><h1>Definitions</h1>' +
+    return '<div class="page-head compact-m s-a' + (active === "drill" ? " is-drill" : "") + '"><div class="eyebrow eyebrow-sec">Section A trainer</div><h1>Definitions</h1>' +
       "<p>Question 1 reads you a description and you write the term. Learn them here, then drill them: the ones examined before come first.</p></div>" +
       missingNotice(["data/glossary.js"]) +
-      '<div class="defs-strip s-a">' + miniStat(TERMS.length, "terms") + miniStat(nExam, "examined before") + miniStat(nGot, "nailed", "good") + miniStat(nMiss, "missed", "bad") + "</div>" +
-      defTabs(active);
+      '<div class="defs-bar">' + defTabs(active) +
+      '<div class="defs-strip s-a">' + miniStat(TERMS.length, "terms") + miniStat(nExam, "examined") + miniStat(nGot, "nailed", "good") + miniStat(nMiss, "missed", "bad") + "</div></div>";
   }
 
   function viewDefinitions(params) {
@@ -851,7 +858,7 @@ const EXAM_AT = "2026-10-22T09:00:00+02:00";
         (r ? '<span class="result-dot ' + r + '" title="Last drill: ' + (r === "got" ? "got it" : "missed") + '"></span>' : "") + "</div>" +
         '<p class="gl-def">' + inline(e.def) + "</p>" +
         '<div class="gl-meta">' +
-        (e.topic ? '<a class="tag tag-topic" href="#/topics/' + enc(e.topic.id) + '">' + esc(e.topic.title) + "</a>" : "") +
+        (e.topic ? '<a class="tag tag-topic" href="#/topics/' + enc(e.topic.id) + '" title="' + esc(e.topic.title) + '">' + esc(shortTitle(e.topic)) + "</a>" : "") +
         yearsBadge(e.years) +
         e.asked.slice(0, 3).map(function (x) { return '<a class="tag" href="' + qHref(x.paper, x.q) + '">' + esc(paperShort(x.paper)) + " Q" + esc(x.q.num) + "</a>"; }).join("") +
         "</div></li>";
@@ -889,10 +896,12 @@ const EXAM_AT = "2026-10-22T09:00:00+02:00";
     const res = defResults();
     const secs = termSections();
     const topicT = dd.topic !== "all" ? topicById.get(dd.topic) : null;
-    h += '<div class="drill-filters no-print"><div class="grid" style="gap:10px">';
     if (topicT) {
-      h += '<div class="notice" role="note" style="margin:0"><span>Drilling terms for <strong>' + esc(topicT.title) + '</strong>.</span> <a href="#/definitions/drill">All terms →</a></div>';
+      h += '<div class="notice" role="note"><span>Drilling terms for <strong>' + esc(topicT.title) + '</strong>.</span> <a href="#/definitions/drill">All terms →</a></div>';
     }
+    const wide = !window.matchMedia || window.matchMedia("(min-width: 700px)").matches;
+    h += '<div class="drill-filters dd-filters no-print"><details class="dd-opts"' + (wide ? " open" : "") + '><summary><span class="dd-sum-label">Deck options</span><span class="dd-sum" id="dd-sum">' + esc(ddSummary()) + "</span>" + ICON.chev + "</summary>" +
+      '<div class="grid" style="gap:10px">';
     h += '<div class="filter-row"><div><div class="filter-label" id="dd-scope">Deck</div><div class="chips" role="group" aria-labelledby="dd-scope">' +
       ddChip("scope", "smart", "Smart: examined first") + ddChip("scope", "examined", "Examined before", TERMS.filter(function (e) { return e.examined; }).length) +
       ddChip("scope", "missed", "Missed", TERMS.filter(function (e) { return res[e.id] === "missed"; }).length) + ddChip("scope", "all", "Random") + "</div></div>" +
@@ -900,7 +909,7 @@ const EXAM_AT = "2026-10-22T09:00:00+02:00";
       ddChip("size", "10", "10") + ddChip("size", "20", "20") + ddChip("size", "50", "50") + ddChip("size", "all", "All") + "</div></div></div>" +
       (secs.length > 1 && !topicT ? '<div><div class="filter-label" id="dd-sec">Section</div><div class="chips" role="group" aria-labelledby="dd-sec">' + ddChip("sec", "all", "All") +
         secs.map(function (s) { const k = secKey(s); return ddChip("sec", k, (k !== "X" ? k + " · " : "") + SEC_SHORT[k], null, secCls(k)); }).join("") + "</div></div>" : "") +
-      '</div><div class="btn-row"><button type="button" class="btn btn-sm" data-ddact="newdeck">' + ICON.shuffle + "New deck</button>" +
+      '</div></details><div class="btn-row"><button type="button" class="btn btn-sm" data-ddact="newdeck">' + ICON.shuffle + "New deck</button>" +
       '<button type="button" class="btn btn-sm btn-ghost" id="dd-reset">Reset saved results</button></div></div>';
     h += '<div class="drill-shell" id="def-stage"></div>';
     return {
@@ -921,6 +930,10 @@ const EXAM_AT = "2026-10-22T09:00:00+02:00";
   function ddChip(group, val, label, count, cls) {
     return '<button type="button" class="chip ' + (cls ? "chip-sec " + cls : "") + '" data-ddf="' + group + '" data-val="' + esc(val) + '" aria-pressed="' + (String(dd[group]) === String(val)) + '">' + esc(label) +
       (count != null ? ' <span class="count">' + count + "</span>" : "") + "</button>";
+  }
+  function ddSummary() {
+    const scope = { smart: "Smart order", examined: "Examined before", missed: "Missed", all: "Random" }[dd.scope] || dd.scope;
+    return scope + " · " + (dd.size === "all" ? "all cards" : dd.size + " cards") + (dd.sec !== "all" ? " · Section " + dd.sec : "");
   }
   function termMatch(typed, term) {
     const t = normTerm(typed);
@@ -954,6 +967,8 @@ const EXAM_AT = "2026-10-22T09:00:00+02:00";
     const saved = defResults();
     const cm = document.querySelector('[data-ddf="scope"][data-val="missed"] .count');
     if (cm) cm.textContent = TERMS.filter(function (e) { return saved[e.id] === "missed"; }).length;
+    const sumEl = document.getElementById("dd-sum");
+    if (sumEl) sumEl.textContent = ddSummary();
     const total = dd.deck.length;
     const got = Object.keys(dd.session).filter(function (k) { return dd.session[k] === "got"; }).length;
     const missedN = Object.keys(dd.session).length - got;
@@ -987,7 +1002,7 @@ const EXAM_AT = "2026-10-22T09:00:00+02:00";
       '<span class="drill-count"><span style="color:var(--good)">✓ ' + got + '</span> &nbsp;<span style="color:var(--bad)">✗ ' + missedN + "</span></span></div>";
     h += '<section class="flashcard defcard s-a" aria-labelledby="def-prompt">' +
       '<div class="fc-top"><span class="fc-type">Name the term</span>' +
-      (e.topic ? '<a class="tag tag-topic" href="#/topics/' + enc(e.topic.id) + '">' + esc(e.topic.title) + "</a>" : "") +
+      (e.topic ? '<a class="tag tag-topic" href="#/topics/' + enc(e.topic.id) + '" title="' + esc(e.topic.title) + '">' + esc(shortTitle(e.topic)) + "</a>" : "") +
       yearsBadge(e.years) +
       (prev ? '<span class="tag" title="Last time"><span class="result-dot ' + prev + '"></span>&nbsp;last: ' + (prev === "got" ? "got it" : "missed") + "</span>" : "") +
       "</div>" +
@@ -1153,7 +1168,7 @@ const EXAM_AT = "2026-10-22T09:00:00+02:00";
       '<span class="badge badge-marks">' + marks + " mark" + (marks === 1 ? "" : "s") + "</span></div>" +
       richText(q.asked || "", "q-asked") +
       '<div class="reveal-row">' + (q.answer ? revealBtn("Reveal answer", base + "-a", "reveal-main", "Hide answer") : '<span class="muted small">No model answer yet.</span>') + "</div>" +
-      (q.answer ? '<div class="reveal-panel answer-panel" id="' + base + '-a" hidden><h4>Model answer' + (marks > 1 ? '<span class="aim">aim for ' + marks + " distinct points</span>" : "") + "</h4>" +
+      (q.answer ? '<div class="reveal-panel answer-panel" id="' + base + '-a" hidden><h4>Model answer' + (marks > 1 ? '<span class="aim">' + marks + " marks = " + marks + " ticks: one clear point each</span>" : "") + "</h4>" +
         richText(q.answer) +
         (q.tip ? '<div class="tip-row">' + revealBtn("Examiner tip", base + "-t", "btn-ghost tip-btn") + "</div>" +
           '<div class="tip-panel" id="' + base + '-t" hidden>' + ICON.bulb + richText(q.tip) + "</div>" : "") +
@@ -1175,7 +1190,7 @@ const EXAM_AT = "2026-10-22T09:00:00+02:00";
   }
   function tagHtml(tag) {
     const t = resolveTag(tag);
-    if (t) return '<a class="tag tag-topic" href="#/topics/' + enc(t.id) + '" title="Topic: ' + esc(t.title) + '">' + esc(t.title) + "</a>";
+    if (t) return '<a class="tag tag-topic" href="#/topics/' + enc(t.id) + '" title="Topic: ' + esc(t.title) + '">' + esc(shortTitle(t)) + "</a>";
     return '<span class="tag">' + esc(tag) + "</span>";
   }
 
@@ -1200,7 +1215,7 @@ const EXAM_AT = "2026-10-22T09:00:00+02:00";
     const rows = new Map();
     function row(key, init) { if (!rows.has(key)) rows.set(key, init); return rows.get(key); }
     TOPICS.forEach(function (t) {
-      row("t:" + t.id, { label: t.title, href: "#/topics/" + enc(t.id), topic: t, sec: secKey(topicSection(t)), cells: {} });
+      row("t:" + t.id, { label: shortTitle(t), full: t.title, href: "#/topics/" + enc(t.id), topic: t, sec: secKey(topicSection(t)), cells: {} });
     });
     QUESTIONS.forEach(function (x) {
       const qs = secKey(x.section.name);
@@ -1270,7 +1285,7 @@ const EXAM_AT = "2026-10-22T09:00:00+02:00";
       cols.map(function (c) { return '<th scope="col"><span class="hy">' + esc(c.label) + "</span>" + (c.sub ? '<span class="hs">' + esc(c.sub) + "</span>" : "") + "</th>"; }).join("") +
       '<th scope="col" title="Years examined"><span class="hy">Yrs</span></th></tr></thead><tbody>';
     all.forEach(function (r) {
-      h += '<tr><th scope="row" class="' + secCls(r.sec) + '"><i class="row-dot" aria-hidden="true"></i>' + (r.href ? '<a href="' + r.href + '">' + esc(r.label) + "</a>" : '<span class="muted">' + esc(r.label) + "</span>") + "</th>";
+      h += '<tr><th scope="row" class="' + secCls(r.sec) + '"><i class="row-dot" aria-hidden="true"></i>' + (r.href ? '<a href="' + r.href + '" title="' + esc(r.full || r.label) + '">' + esc(r.label) + "</a>" : '<span class="muted">' + esc(r.label) + "</span>") + "</th>";
       cols.forEach(function (col) {
         const c = r.cells[col.key];
         const colName = col.label + (col.sub ? " " + col.sub : "");
@@ -1427,14 +1442,14 @@ const EXAM_AT = "2026-10-22T09:00:00+02:00";
 
     const d = currentDrill();
     const t = d && topicById.get(d.topic);
-    const prev = saved[d.id];
+    const prev = drill.picked == null && !drill.session[d.id] ? saved[d.id] : null;
     const sk = t ? secKey(topicSection(t)) : "";
     let h = '<div class="drill-bar"><span class="drill-count">' + (drill.i + 1) + " / " + total + "</span>" +
       '<div class="meter" role="progressbar" aria-label="Deck progress" aria-valuemin="0" aria-valuemax="' + total + '" aria-valuenow="' + drill.i + '"><span style="width:' + pct(drill.i, total) + '%"></span></div>' +
       '<span class="drill-count"><span style="color:var(--good)">✓ ' + got + '</span> &nbsp;<span style="color:var(--bad)">✗ ' + missedN + "</span></span></div>";
     h += '<section class="flashcard ' + secCls(sk) + '" aria-labelledby="fc-prompt">' +
       '<div class="fc-top"><span class="fc-type">' + esc(TYPE_LABEL[d.type] || d.type || "Drill") + "</span>" +
-      (t ? secPill(topicSection(t), true) + '<a class="tag tag-topic" href="#/topics/' + enc(t.id) + '">' + esc(t.title) + "</a>" : d.topic ? '<span class="tag">' + esc(d.topic) + "</span>" : "") +
+      (t ? secPill(topicSection(t), true) + '<a class="tag tag-topic" href="#/topics/' + enc(t.id) + '" title="' + esc(t.title) + '">' + esc(shortTitle(t)) + "</a>" : d.topic ? '<span class="tag">' + esc(d.topic) + "</span>" : "") +
       (prev ? '<span class="tag" title="Last time"><span class="result-dot ' + prev + '"></span>&nbsp;last: ' + (prev === "got" ? "got it" : "missed") + "</span>" : "") +
       "</div>" + '<div id="fc-prompt">' + richText(d.prompt || "", "fc-prompt" + (d.type === "scenario" ? " fc-scenario" : "")) + "</div>";
 
@@ -1693,7 +1708,7 @@ const EXAM_AT = "2026-10-22T09:00:00+02:00";
       else if (head === "papers") { nav = "papers"; out = viewPapers(); }
       else if (head === "heatmap") { nav = "papers"; out = viewHeatmap(); }
       else if (head === "drills") { nav = "drills"; out = viewDrills(r.params); }
-      else if (head === "cheat") { nav = "cheat"; out = viewCheat(); }
+      else if (head === "cheat" || head === "cheatsheets" || head === "cheatsheet") { nav = "cheat"; out = viewCheat(); }
       else if (head === "exam") { nav = "exam"; out = viewExam(); }
       else out = notFound("There's no page at that address.", "#/", "Home");
     } catch (err) {
@@ -1795,7 +1810,12 @@ const EXAM_AT = "2026-10-22T09:00:00+02:00";
       scored.push({ e: e, s: s });
     });
     scored.sort(function (a, b) { return b.s - a.s; });
-    const groups = [["Topic", "Topics", 5], ["Term", "Definitions", 6], ["Q", "Past-paper questions", 8], ["Drill", "Drills", 5]];
+    const best = {};
+    scored.forEach(function (x) { if (!(x.e.kind in best)) best[x.e.kind] = x.s; });
+    const groups = [["Topic", "Topics", 5], ["Term", "Definitions", 6], ["Q", "Past-paper questions", 8], ["Drill", "Drills", 5]]
+      .map(function (g, i) { return { g: g, i: i }; })
+      .sort(function (a, b) { return (best[b.g[0]] || 0) - (best[a.g[0]] || 0) || a.i - b.i; })
+      .map(function (x) { return x.g; });
     let h = "", n = 0;
     groups.forEach(function (g) {
       const items = scored.filter(function (x) { return x.e.kind === g[0]; }).slice(0, g[2]);
